@@ -60,7 +60,7 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
 
       <div className="h-full flex items-center justify-center p-7 text-center">
         <div className="w-[92vw] max-w-[980px] -translate-y-1.5 flex flex-col items-center gap-2.5">
-          <div className="relative grid place-items-center mb-6 h-[420px] w-[420px]">
+          <div className="relative grid place-items-center mb-6 h-[520px] w-[520px]">
             <div
               className="absolute -inset-[34px] blur-[10px]"
               style={{
