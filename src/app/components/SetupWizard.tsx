@@ -176,7 +176,7 @@ export const SetupWizard: React.FC<{ onComplete: (profileId: ProfileId) => void 
       <header className="fixed top-0 left-0 right-0 z-50 w-full px-6 lg:px-10 py-5 flex items-center justify-between border-b border-border backdrop-blur-sm bg-background/80">
         <div className="flex items-center gap-6">
           <div className="size-8 flex items-center justify-center">
-            <img src="public/images/Image1.png" alt="Logo" className="w-8 h-8 object-contain transform scale-[2.25] origin-center" />
+            <img src={`${import.meta.env.BASE_URL}images/Image1.png`} alt="Logo" className="w-8 h-8 object-contain transform scale-[2.25] origin-center" />
           </div>
           <h2 className="text-foreground text-xl font-bold tracking-tight">
             {text.systemName}

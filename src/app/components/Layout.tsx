@@ -109,7 +109,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
         >
           <div className="flex items-center gap-6">
             <div className="size-8 flex items-center justify-center">
-              <img src="public/images/Image1.png" alt="Logo" className="w-8 h-8 object-contain transform scale-[2.25] origin-center" />
+              <img src={`${import.meta.env.BASE_URL}images/Image1.png`} alt="Logo" className="w-8 h-8 object-contain transform scale-[2.25] origin-center" />
             </div>
             <h2 className="text-foreground text-xl font-bold tracking-tight">
               {t('systemName', language)}
