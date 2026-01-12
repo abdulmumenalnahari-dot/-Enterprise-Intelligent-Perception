@@ -68,7 +68,7 @@ export const SplashScreen: React.FC<{ onComplete: () => void }> = ({ onComplete 
               }}
             />
             <img
-              src="/images/Image.png"
+              src="public/images/Image.png"
               alt="الشعار"
               className="relative z-10 h-full w-full object-contain"
               style={{ filter: colors.logoShadow }}
