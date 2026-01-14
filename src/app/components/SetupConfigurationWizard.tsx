@@ -10,6 +10,7 @@ import { Slider } from './ui/slider';
 import { Checkbox } from './ui/checkbox';
 import { Progress } from './ui/progress';
 import { baseColors, setupConfigColors } from '../theme';
+import { isNonEmpty } from '../utils/validation';
 
 type EnvironmentId = 'university' | 'service' | 'market' | 'airport' | 'public' | 'work';
 
@@ -148,6 +149,7 @@ export function SetupConfigurationWizard({
   const [soundAlerts, setSoundAlerts] = useState(true);
   const [emailAlerts, setEmailAlerts] = useState(true);
   const [smsAlerts, setSmsAlerts] = useState(false);
+  const [showCameraErrors, setShowCameraErrors] = useState(false);
 
   const isRTL = language === 'ar';
   const isDark = theme === 'dark';
@@ -155,7 +157,7 @@ export function SetupConfigurationWizard({
   const text = useMemo(() => copy[isRTL ? 'ar' : 'en'], [isRTL]);
   const rootStyle: React.CSSProperties = {
     color: isDark ? baseColors.white : colors.text,
-    background: isDark ? colors.backgroundDark : colors.backgroundLight,
+    background: 'var(--background)',
     fontFamily: isRTL ? "'Tajawal', sans-serif" : "'Inter', sans-serif",
     '--setup-accent': colors.accent,
     '--setup-accent-soft': colors.accentSoft,
@@ -212,6 +214,13 @@ export function SetupConfigurationWizard({
   };
 
   const handleNext = () => {
+    if (currentStep === 1) {
+      const hasInvalid = cameras.some((camera) => !isNonEmpty(camera.name) || !isNonEmpty(camera.location));
+      if (hasInvalid) {
+        setShowCameraErrors(true);
+        return;
+      }
+    }
     if (currentStep < totalSteps) {
       setCurrentStep((prev) => prev + 1);
     } else {
@@ -285,7 +294,10 @@ export function SetupConfigurationWizard({
         <div className="w-full max-w-4xl">
           <style>{`
             .setup-progress[data-slot="progress"] {
-              background-color: var(--setup-accent-soft);
+              background-color: rgba(120, 120, 120, 0.32);
+            }
+            .dark .setup-progress[data-slot="progress"] {
+              background-color: rgba(255, 255, 255, 0.22);
             }
             .setup-progress [data-slot="progress-indicator"] {
               background-color: var(--setup-accent);
@@ -305,8 +317,17 @@ export function SetupConfigurationWizard({
             .gold-switch [data-slot="switch-thumb"] {
               background-color: var(--setup-switch-thumb);
             }
+            html:not(.dark) .gold-switch [data-slot="switch-thumb"] {
+              background-color: #0a1415;
+            }
+            .dark .gold-switch [data-slot="switch-thumb"] {
+              background-color: #ffffff;
+            }
             .gold-slider [data-slot="slider-track"] {
-              background-color: var(--setup-accent-soft-alt);
+              background-color: rgba(229, 231, 235, 0.85);
+            }
+            .dark .gold-slider [data-slot="slider-track"] {
+              background-color: rgba(255, 255, 255, 0.18);
             }
             .gold-slider [data-slot="slider-range"] {
               background-color: var(--setup-accent);
@@ -314,11 +335,18 @@ export function SetupConfigurationWizard({
             .gold-slider [data-slot="slider-thumb"] {
               border-color: var(--setup-accent);
               box-shadow: var(--setup-slider-shadow);
+              background-color: #0a1415;
+            }
+            .dark .gold-slider [data-slot="slider-thumb"] {
+              background-color: #ffffff;
             }
             .gold-checkbox[data-state="unchecked"] {
-              background-color: var(--setup-switch-off);
-              border-color: var(--setup-accent-border);
-              box-shadow: inset 0 0 0 1px var(--setup-switch-off);
+              background-color: rgba(10, 20, 21, 0.25);
+              border-color: var(--setup-accent);
+              box-shadow: inset 0 0 0 1px rgba(10, 20, 21, 0.25);
+            }
+            html:not(.dark) .gold-checkbox[data-state="unchecked"] {
+              border-color: #0a1415;
             }
             .gold-checkbox[data-state="checked"] {
               background-color: var(--setup-accent);
@@ -359,9 +387,11 @@ export function SetupConfigurationWizard({
                             const newCameras = [...cameras];
                             newCameras[index].name = e.target.value;
                             setCameras(newCameras);
+                            if (showCameraErrors) setShowCameraErrors(false);
                           }}
                         placeholder={language === 'ar' ? 'مثال: كاميرا المدخل' : 'e.g. Entry Camera'}
-                          className="flex-1 min-w-[200px] bg-[color:var(--setup-input-bg)] border border-[color:var(--setup-border)] text-[color:var(--setup-foreground)] placeholder:text-[color:var(--setup-placeholder)] focus:ring-1 focus:ring-[color:var(--setup-accent)] focus:border-[color:var(--setup-accent)]"
+                          className="flex-1 min-w-[200px] bg-card border-border text-foreground placeholder:text-muted-foreground focus:ring-1 focus:ring-[color:var(--setup-accent)] focus:border-[color:var(--setup-accent)]"
+                          aria-invalid={showCameraErrors && !isNonEmpty(camera.name)}
                         />
                         <Input
                           value={camera.location}
@@ -369,9 +399,11 @@ export function SetupConfigurationWizard({
                             const newCameras = [...cameras];
                             newCameras[index].location = e.target.value;
                             setCameras(newCameras);
+                            if (showCameraErrors) setShowCameraErrors(false);
                           }}
                         placeholder={language === 'ar' ? 'مثال: الطابق الأول' : 'e.g. Floor 1'}
-                          className="flex-1 min-w-[200px] bg-[color:var(--setup-input-bg)] border border-[color:var(--setup-border)] text-[color:var(--setup-foreground)] placeholder:text-[color:var(--setup-placeholder)] focus:ring-1 focus:ring-[color:var(--setup-accent)] focus:border-[color:var(--setup-accent)]"
+                          className="flex-1 min-w-[200px] bg-card border-border text-foreground placeholder:text-muted-foreground focus:ring-1 focus:ring-[color:var(--setup-accent)] focus:border-[color:var(--setup-accent)]"
+                          aria-invalid={showCameraErrors && !isNonEmpty(camera.location)}
                         />
                         <div className="flex items-center gap-2">
                           <div className={`w-2 h-2 rounded-full ${camera.status === 'online' ? 'bg-green-500' : 'bg-red-500'}`} />
@@ -395,6 +427,11 @@ export function SetupConfigurationWizard({
                           className="gold-slider"
                         />
                       </div>
+                      {showCameraErrors && (!isNonEmpty(camera.name) || !isNonEmpty(camera.location)) && (
+                        <p className="text-xs text-red-600 dark:text-red-400">
+                          {language === 'ar' ? 'يرجى إدخال اسم وموقع لكل كاميرا' : 'Please enter a name and location for each camera.'}
+                        </p>
+                      )}
                     </div>
                   ))}
                   <Button

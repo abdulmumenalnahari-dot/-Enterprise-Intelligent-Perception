@@ -83,10 +83,8 @@ export function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
 
   return (
     <div
-      className="min-h-screen flex flex-col antialiased"
+      className="min-h-screen flex flex-col antialiased bg-background text-foreground"
       style={{
-        color: isDark ? baseColors.white : colors.text,
-        background: isDark ? colors.backgroundDark : colors.backgroundLight,
         fontFamily: isRTL ? "'Tajawal', sans-serif" : "'Inter', sans-serif",
         '--onboarding-accent': colors.accent,
         '--onboarding-border': isDark ? colors.headerBorderDark : colors.headerBorderLight,

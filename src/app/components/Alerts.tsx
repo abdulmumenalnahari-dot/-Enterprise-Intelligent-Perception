@@ -19,14 +19,18 @@ export const Alerts: React.FC = () => {
     titleEn: string;
     descriptionAr: string;
     descriptionEn: string;
+    acknowledgedAt?: Date;
   };
 
   const [alerts, setAlerts] = useState<AlertMeta[]>(() => generateAlerts());
 
   const handleAcknowledge = (id: string) => {
-    setAlerts(alerts.map(alert => 
-      alert.id === id ? { ...alert, acknowledged: true } : alert
-    ));
+    const now = new Date();
+    setAlerts((prev) =>
+      prev.map((alert) =>
+        alert.id === id ? { ...alert, acknowledged: true, acknowledgedAt: now } : alert
+      )
+    );
   };
 
   const isToday = (date: Date) => {
@@ -42,9 +46,17 @@ export const Alerts: React.FC = () => {
     if (filter === 'active' && alert.acknowledged) return false;
     if (filter === 'acknowledged' && !alert.acknowledged) return false;
     if (severityFilter !== 'all' && alert.severity !== severityFilter) return false;
-    if (todayOnly && !isToday(alert.timestamp)) return false;
+    const dateRef = filter === 'acknowledged' ? (alert.acknowledgedAt ?? alert.timestamp) : alert.timestamp;
+    if (todayOnly && !isToday(dateRef)) return false;
     return true;
   });
+
+  const alertCounts = useMemo(() => ({
+    active: alerts.filter((a) => !a.acknowledged).length,
+    critical: alerts.filter((a) => a.severity === 'critical').length,
+    high: alerts.filter((a) => a.severity === 'high').length,
+    acknowledged: alerts.filter((a) => a.acknowledged).length
+  }), [alerts]);
 
   const applyQuickFilter = (nextFilter: 'all' | 'active' | 'acknowledged', severity: typeof severityFilter, onlyToday: boolean) => {
     setFilter(nextFilter);
@@ -126,7 +138,7 @@ export const Alerts: React.FC = () => {
             <div>
               <p className="text-muted-foreground text-sm">{t('activeAlerts', language)}</p>
               <p className="text-2xl font-bold text-foreground">
-                {alerts.filter(a => !a.acknowledged).length}
+                {alertCounts.active}
               </p>
             </div>
             <div className="w-12 h-12 bg-destructive/15 rounded-lg flex items-center justify-center">
@@ -143,7 +155,7 @@ export const Alerts: React.FC = () => {
             <div>
               <p className="text-muted-foreground text-sm">{language === 'ar' ? 'حرج' : 'Critical'}</p>
               <p className="text-2xl font-bold text-destructive">
-                {alerts.filter(a => a.severity === 'critical' && !a.acknowledged).length}
+                {alertCounts.critical}
               </p>
             </div>
             <div className="w-12 h-12 bg-destructive/20 rounded-lg flex items-center justify-center">
@@ -160,7 +172,7 @@ export const Alerts: React.FC = () => {
             <div>
               <p className="text-muted-foreground text-sm">{language === 'ar' ? 'عالي' : 'High'}</p>
               <p className="text-2xl font-bold text-[color:var(--chart-5)]">
-                {alerts.filter(a => a.severity === 'high' && !a.acknowledged).length}
+                {alertCounts.high}
               </p>
             </div>
             <div className="w-12 h-12 bg-[color:var(--chart-5)]/15 rounded-lg flex items-center justify-center">
@@ -171,13 +183,13 @@ export const Alerts: React.FC = () => {
 
         <Card
           className="bg-card/80 border-border p-4 cursor-pointer hover:border-primary/40 transition-all"
-          onClick={() => applyQuickFilter('acknowledged', 'all', true)}
+          onClick={() => applyQuickFilter('acknowledged', 'all', false)}
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-muted-foreground text-sm">{language === 'ar' ? 'تمت المعالجة اليوم' : 'Resolved Today'}</p>
+              <p className="text-muted-foreground text-sm">{language === 'ar' ? 'تمت المعالجة' : 'Acknowledged'}</p>
               <p className="text-2xl font-bold text-[color:var(--chart-4)]">
-                {alerts.filter(a => a.acknowledged && isToday(a.timestamp)).length}
+                {alertCounts.acknowledged}
               </p>
             </div>
             <div className="w-12 h-12 bg-[color:var(--chart-4)]/15 rounded-lg flex items-center justify-center">
@@ -189,14 +201,16 @@ export const Alerts: React.FC = () => {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-4">
-        <div className="flex gap-2 bg-card/80 border border-border rounded-lg p-1">
+        <div className="flex gap-2 bg-card border border-border rounded-lg p-1 shadow-sm">
           <button
             onClick={() => {
               setFilter('all');
               setTodayOnly(false);
             }}
             className={`px-4 py-2 rounded-md text-sm transition-all ${
-              filter === 'all' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+              filter === 'all'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary dark:bg-[#243638] dark:text-[#f6f8f8]'
             }`}
           >
             {language === 'ar' ? 'الكل' : 'All'}
@@ -207,7 +221,9 @@ export const Alerts: React.FC = () => {
               setTodayOnly(false);
             }}
             className={`px-4 py-2 rounded-md text-sm transition-all ${
-              filter === 'active' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+              filter === 'active'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary dark:bg-[#243638] dark:text-[#f6f8f8]'
             }`}
           >
             {language === 'ar' ? 'نشط' : 'Active'}
@@ -218,7 +234,9 @@ export const Alerts: React.FC = () => {
               setTodayOnly(false);
             }}
             className={`px-4 py-2 rounded-md text-sm transition-all ${
-              filter === 'acknowledged' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+              filter === 'acknowledged'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary dark:bg-[#243638] dark:text-[#f6f8f8]'
             }`}
           >
             {language === 'ar' ? 'تمت المعالجة' : 'Acknowledged'}
@@ -425,6 +443,7 @@ function generateAlerts(): (AlertType & { titleAr: string; titleEn: string; desc
   return schedule.map((item, index) => {
     const template = alertTemplates[index % alertTemplates.length];
     const camera = cameras[index % cameras.length];
+    const timestamp = new Date(now - item.offset);
     return {
       id: `A${(index + 1).toString().padStart(3, '0')}`,
       type: template.type as AlertType['type'],
@@ -437,8 +456,9 @@ function generateAlerts(): (AlertType & { titleAr: string; titleEn: string; desc
       description: template.descriptionEn,
       cameraId: camera.id,
       cameraName: camera.nameEn,
-      timestamp: new Date(now - item.offset),
+      timestamp,
       acknowledged: item.acknowledged,
+      acknowledgedAt: item.acknowledged ? timestamp : undefined,
       personId: template.withPerson ? `P${1000 + index}` : undefined,
     };
   });

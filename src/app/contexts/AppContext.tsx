@@ -234,6 +234,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
 
+  useEffect(() => {
+    try {
+      const sessionState = localStorage.getItem('aura_session_state');
+      if (sessionState !== 'logged-in') return;
+      const stored = localStorage.getItem('aura_session');
+      if (!stored) return;
+      const session = JSON.parse(stored);
+      if (session?.email) {
+        setCurrentUserEmail(session.email);
+        setIsAuthenticated(true);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
   const resetUserSettings = () => {
     setLanguage('ar');
     setTheme('dark');

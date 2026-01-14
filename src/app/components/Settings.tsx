@@ -11,6 +11,7 @@ import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { Palette, Type, Accessibility, Save, RotateCcw, ShieldCheck, UserPlus, KeyRound, Mail } from 'lucide-react';
 import { defaultCustomTheme, setupConfigColors, setupWizardColors } from '../theme';
+import { isNonEmpty, isStrongPassword, isValidEmail } from '../utils/validation';
 
 type Role = 'admin' | 'operator' | 'viewer';
 
@@ -52,10 +53,12 @@ export const Settings: React.FC = () => {
   const isDark = theme === 'dark';
   const [accountEmail, setAccountEmail] = useState(currentUserEmail ?? 'admin@aura-a.io');
   const [emailStatus, setEmailStatus] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordStatus, setPasswordStatus] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   const [users, setUsers] = useState<UserRecord[]>([
     { id: 'U-001', name: 'Admin', email: 'admin@aura-a.io', role: 'admin', status: 'active' },
@@ -67,6 +70,7 @@ export const Settings: React.FC = () => {
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editRole, setEditRole] = useState<Role>('viewer');
+  const [editError, setEditError] = useState('');
 
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
@@ -74,10 +78,10 @@ export const Settings: React.FC = () => {
   const [newUserPassword, setNewUserPassword] = useState('');
   const [sendInvite, setSendInvite] = useState(true);
   const [userStatus, setUserStatus] = useState('');
+  const [userError, setUserError] = useState('');
   const [appearanceStatus, setAppearanceStatus] = useState('');
   const [showCustomControls, setShowCustomControls] = useState(appearanceSaved?.colorPreset === 'custom');
 
-  const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
   const safeTheme = {
     primary: customTheme?.primary ?? defaultCustomTheme.primary,
     accent: customTheme?.accent ?? defaultCustomTheme.accent,
@@ -135,9 +139,11 @@ export const Settings: React.FC = () => {
   const handleSaveEmail = () => {
     const nextEmail = accountEmail.trim().toLowerCase();
     if (!isValidEmail(nextEmail)) {
-      setEmailStatus(isRTL ? 'بريد غير صالح' : 'Invalid email');
+      setEmailError(isRTL ? 'بريد غير صالح' : 'Invalid email');
+      setEmailStatus('');
       return;
     }
+    setEmailError('');
     if (currentUserEmail && nextEmail !== currentUserEmail) {
       const payload = {
         language,
@@ -159,10 +165,12 @@ export const Settings: React.FC = () => {
   };
 
   const handleSavePassword = () => {
-    if (!currentPassword || newPassword.length < 8 || newPassword !== confirmPassword) {
-      setPasswordStatus(isRTL ? 'تحقق من الحقول وكلمة المرور' : 'Please verify password fields');
+    if (!currentPassword || !isStrongPassword(newPassword) || newPassword !== confirmPassword) {
+      setPasswordError(isRTL ? 'تحقق من الحقول وكلمة المرور' : 'Please verify password fields');
+      setPasswordStatus('');
       return;
     }
+    setPasswordError('');
     setPasswordStatus(isRTL ? 'تم تحديث كلمة المرور' : 'Password updated');
     setCurrentPassword('');
     setNewPassword('');
@@ -177,10 +185,15 @@ export const Settings: React.FC = () => {
   };
 
   const saveEdit = () => {
+    if (!isNonEmpty(editName) || !isValidEmail(editEmail)) {
+      setEditError(isRTL ? 'تحقق من الاسم والبريد' : 'Please verify name and email');
+      return;
+    }
+    setEditError('');
     setUsers((prev) =>
       prev.map((user) =>
         user.id === editingId
-          ? { ...user, name: editName, email: editEmail, role: editRole }
+          ? { ...user, name: editName.trim(), email: editEmail.trim().toLowerCase(), role: editRole }
           : user
       )
     );
@@ -188,14 +201,21 @@ export const Settings: React.FC = () => {
   };
 
   const addUser = () => {
-    if (!newUserName || !newUserEmail) {
-      setUserStatus(isRTL ? 'يرجى إدخال الاسم والبريد' : 'Please provide name and email');
+    if (!isNonEmpty(newUserName) || !isValidEmail(newUserEmail)) {
+      setUserError(isRTL ? 'تحقق من الاسم والبريد' : 'Please verify name and email');
+      setUserStatus('');
       return;
     }
+    if (newUserPassword && !isStrongPassword(newUserPassword)) {
+      setUserError(isRTL ? 'كلمة المرور يجب أن تكون 8 أحرف على الأقل' : 'Password must be at least 8 characters');
+      setUserStatus('');
+      return;
+    }
+    setUserError('');
     const newRecord: UserRecord = {
       id: `U-${(users.length + 1).toString().padStart(3, '0')}`,
-      name: newUserName,
-      email: newUserEmail,
+      name: newUserName.trim(),
+      email: newUserEmail.trim().toLowerCase(),
       role: newUserRole,
       status: 'active'
     };
@@ -238,9 +258,36 @@ export const Settings: React.FC = () => {
         .settings-switch [data-slot="switch-thumb"] {
           background-color: var(--settings-switch-thumb);
         }
+        html:not(.dark) .settings-switch [data-slot="switch-thumb"] {
+          background-color: #0a1415;
+        }
+        .settings-slider [data-slot="slider-track"] {
+          background-color: rgba(229, 231, 235, 0.85);
+        }
+        .dark .settings-slider [data-slot="slider-track"] {
+          background-color: rgba(255, 255, 255, 0.18);
+        }
+        .settings-slider [data-slot="slider-range"] {
+          background-color: var(--settings-switch-on);
+        }
+        .settings-slider [data-slot="slider-thumb"] {
+          border-color: var(--settings-switch-on);
+          background-color: #0a1415;
+        }
+        .dark .settings-slider [data-slot="slider-thumb"] {
+          background-color: #ffffff;
+        }
+        .settings-card {
+          background-color: var(--card);
+          border-color: var(--border);
+        }
+        html:not(.dark) .settings-card {
+          background-color: rgba(255, 255, 255, 0.85);
+          border-color: rgba(215, 224, 225, 0.9);
+        }
       `}</style>
       {/* Account & Security */}
-      <Card className="bg-card/80 border-border p-6">
+      <Card className="settings-card bg-card border-border p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 bg-primary/15 rounded-lg flex items-center justify-center">
             <ShieldCheck className="w-5 h-5 text-primary" />
@@ -256,14 +303,26 @@ export const Settings: React.FC = () => {
             </div>
             <Input
               value={accountEmail}
-              onChange={(e) => setAccountEmail(e.target.value)}
+              onChange={(e) => {
+                setAccountEmail(e.target.value);
+                if (emailError) setEmailError('');
+              }}
+              onBlur={() => {
+                if (accountEmail.trim() && !isValidEmail(accountEmail)) {
+                  setEmailError(isRTL ? 'بريد غير صالح' : 'Invalid email');
+                }
+              }}
               className="bg-card/80 border-border text-foreground"
+              inputMode="email"
+              autoComplete="email"
+              aria-invalid={Boolean(emailError)}
             />
             <div className="flex items-center gap-3">
               <Button onClick={handleSaveEmail} className="bg-primary text-primary-foreground hover:bg-primary/90">
                 {isRTL ? 'تحديث البريد' : 'Update Email'}
               </Button>
               {emailStatus && <span className="text-muted-foreground text-sm">{emailStatus}</span>}
+              {emailError && <span className="text-xs text-red-600 dark:text-red-400">{emailError}</span>}
             </div>
           </div>
 
@@ -275,36 +334,49 @@ export const Settings: React.FC = () => {
             <Input
               type="password"
               value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
+              onChange={(e) => {
+                setCurrentPassword(e.target.value);
+                if (passwordError) setPasswordError('');
+              }}
               placeholder={isRTL ? 'كلمة المرور الحالية' : 'Current password'}
               className="bg-card/80 border-border text-foreground"
+              aria-invalid={Boolean(passwordError)}
             />
             <Input
               type="password"
               value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
+              onChange={(e) => {
+                setNewPassword(e.target.value);
+                if (passwordError) setPasswordError('');
+              }}
               placeholder={isRTL ? 'كلمة مرور جديدة' : 'New password'}
               className="bg-card/80 border-border text-foreground"
+              aria-invalid={Boolean(passwordError)}
             />
             <Input
               type="password"
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              onChange={(e) => {
+                setConfirmPassword(e.target.value);
+                if (passwordError) setPasswordError('');
+              }}
               placeholder={isRTL ? 'تأكيد كلمة المرور' : 'Confirm password'}
               className="bg-card/80 border-border text-foreground"
+              aria-invalid={Boolean(passwordError)}
             />
             <div className="flex items-center gap-3">
               <Button onClick={handleSavePassword} className="bg-primary text-primary-foreground hover:bg-primary/90">
                 {isRTL ? 'تحديث كلمة المرور' : 'Update Password'}
               </Button>
               {passwordStatus && <span className="text-muted-foreground text-sm">{passwordStatus}</span>}
+              {passwordError && <span className="text-xs text-red-600 dark:text-red-400">{passwordError}</span>}
             </div>
           </div>
         </div>
       </Card>
 
       {/* User Management */}
-      <Card className="bg-card/80 border-border p-6">
+      <Card className="settings-card bg-card border-border p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 bg-accent/15 rounded-lg flex items-center justify-center">
             <UserPlus className="w-5 h-5 text-accent" />
@@ -315,15 +387,25 @@ export const Settings: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
           <Input
             value={newUserName}
-            onChange={(e) => setNewUserName(e.target.value)}
+            onChange={(e) => {
+              setNewUserName(e.target.value);
+              if (userError) setUserError('');
+            }}
             placeholder={isRTL ? 'اسم المستخدم' : 'User name'}
             className="bg-card/80 border-border text-foreground"
+            aria-invalid={Boolean(userError)}
           />
           <Input
             value={newUserEmail}
-            onChange={(e) => setNewUserEmail(e.target.value)}
+            onChange={(e) => {
+              setNewUserEmail(e.target.value);
+              if (userError) setUserError('');
+            }}
             placeholder={isRTL ? 'البريد الإلكتروني' : 'Email address'}
             className="bg-card/80 border-border text-foreground"
+            inputMode="email"
+            autoComplete="email"
+            aria-invalid={Boolean(userError)}
           />
           <Select value={newUserRole} onValueChange={(value) => setNewUserRole(value as Role)}>
             <SelectTrigger className="bg-card/80 border-border text-foreground">
@@ -337,9 +419,13 @@ export const Settings: React.FC = () => {
           </Select>
           <Input
             value={newUserPassword}
-            onChange={(e) => setNewUserPassword(e.target.value)}
+            onChange={(e) => {
+              setNewUserPassword(e.target.value);
+              if (userError) setUserError('');
+            }}
             placeholder={isRTL ? 'كلمة مرور مؤقتة' : 'Temporary password'}
             className="bg-card/80 border-border text-foreground"
+            aria-invalid={Boolean(userError)}
           />
           <div className="flex items-center gap-3">
             <Switch checked={sendInvite} onCheckedChange={setSendInvite} className="settings-switch" />
@@ -351,6 +437,7 @@ export const Settings: React.FC = () => {
             {isRTL ? 'إضافة مستخدم' : 'Add User'}
           </Button>
           {userStatus && <span className="text-muted-foreground text-sm">{userStatus}</span>}
+          {userError && <span className="text-xs text-red-600 dark:text-red-400">{userError}</span>}
         </div>
 
         <div className="space-y-3">
@@ -407,25 +494,30 @@ export const Settings: React.FC = () => {
                   </>
                 ) : (
                   <>
-                    <Button variant="outline" onClick={() => startEdit(user)} className="border-border text-foreground hover:bg-secondary">
+                    <Button variant="outline" onClick={() => startEdit(user)} className="border-border text-foreground hover:bg-secondary dark:bg-[#243638]">
                       {isRTL ? 'تعديل' : 'Edit'}
                     </Button>
-                    <Button variant="outline" onClick={() => toggleUserStatus(user.id)} className="border-border text-foreground hover:bg-secondary">
+                    <Button variant="outline" onClick={() => toggleUserStatus(user.id)} className="border-border text-foreground hover:bg-secondary dark:bg-[#243638]">
                       {user.status === 'active' ? (isRTL ? 'إيقاف' : 'Suspend') : (isRTL ? 'تفعيل' : 'Activate')}
                     </Button>
-                    <Button variant="outline" onClick={() => removeUser(user.id)} className="border-destructive/60 text-destructive hover:bg-destructive/10">
+                    <Button variant="outline" onClick={() => removeUser(user.id)} className="border-destructive/60 text-destructive hover:bg-destructive/10 dark:bg-[#243638]">
                       {isRTL ? 'حذف' : 'Delete'}
                     </Button>
                   </>
                 )}
               </div>
+              {editingId === user.id && editError && (
+                <div className="w-full text-xs text-red-600 dark:text-red-400">
+                  {editError}
+                </div>
+              )}
             </div>
           ))}
         </div>
       </Card>
 
       {/* General Settings */}
-      <Card className="bg-card/80 border-border p-6">
+      <Card className="settings-card bg-card border-border p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 bg-accent/15 rounded-lg flex items-center justify-center">
             <Type className="w-5 h-5 text-accent" />
@@ -444,16 +536,20 @@ export const Settings: React.FC = () => {
             <div className="flex gap-2">
               <button
                 onClick={() => setLanguage('ar')}
-                className={`px-4 py-2 rounded-lg transition-all bg-[color:var(--settings-neutral-bg)] text-[color:var(--settings-neutral-text)] hover:bg-[color:var(--settings-neutral-hover)] ${
-                  language === 'ar' ? 'ring-2 ring-[color:var(--settings-neutral-hover)]' : ''
+                className={`px-4 py-2 rounded-lg transition-all ${
+                  language === 'ar'
+                    ? 'bg-[color:var(--settings-switch-on)] text-[color:var(--settings-neutral-text)]'
+                    : 'bg-[color:var(--settings-neutral-bg)] text-[color:var(--settings-neutral-text)] hover:bg-[color:var(--settings-neutral-hover)]'
                 }`}
               >
                 عربي
               </button>
               <button
                 onClick={() => setLanguage('en')}
-                className={`px-4 py-2 rounded-lg transition-all bg-[color:var(--settings-neutral-bg)] text-[color:var(--settings-neutral-text)] hover:bg-[color:var(--settings-neutral-hover)] ${
-                  language === 'en' ? 'ring-2 ring-[color:var(--settings-neutral-hover)]' : ''
+                className={`px-4 py-2 rounded-lg transition-all ${
+                  language === 'en'
+                    ? 'bg-[color:var(--settings-switch-on)] text-[color:var(--settings-neutral-text)]'
+                    : 'bg-[color:var(--settings-neutral-bg)] text-[color:var(--settings-neutral-text)] hover:bg-[color:var(--settings-neutral-hover)]'
                 }`}
               >
                 English
@@ -488,7 +584,7 @@ export const Settings: React.FC = () => {
       </Card>
 
       {/* Appearance */}
-      <Card className="bg-card/80 border-border p-6">
+      <Card className="settings-card bg-card border-border p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 bg-primary/15 rounded-lg flex items-center justify-center">
             <Palette className="w-5 h-5 text-primary" />
@@ -685,7 +781,11 @@ export const Settings: React.FC = () => {
                 restoreAppearanceDefaults();
                 setAppearanceStatus(isRTL ? 'تمت العودة للوضع الافتراضي' : 'Restored to default');
               }}
-              className="border border-transparent bg-[color:var(--settings-neutral-bg)] text-[color:var(--settings-neutral-text)] hover:bg-[color:var(--settings-neutral-hover)]"
+              className={`border border-transparent ${
+                colorPreset === 'default'
+                  ? 'bg-[color:var(--settings-switch-on)] text-[color:var(--settings-neutral-text)]'
+                  : 'bg-[color:var(--settings-neutral-bg)] text-[color:var(--settings-neutral-text)] hover:bg-[color:var(--settings-neutral-hover)]'
+              }`}
             >
               {isRTL ? 'الافتراضي' : 'Default'}
             </Button>
@@ -704,7 +804,7 @@ export const Settings: React.FC = () => {
                 max={20}
                 step={1}
                 onValueChange={handleFontSizeChange}
-                className="flex-1"
+                className="flex-1 settings-slider"
               />
               <div className="flex gap-2">
                 <span className={`text-xs ${fontSize === 'small' ? 'text-primary' : 'text-muted-foreground'}`}>A</span>
@@ -718,7 +818,7 @@ export const Settings: React.FC = () => {
       </Card>
 
       {/* Accessibility */}
-      <Card className="bg-card/80 border-border p-6">
+      <Card className="settings-card bg-card border-border p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 bg-[color:var(--chart-4)]/15 rounded-lg flex items-center justify-center">
             <Accessibility className="w-5 h-5 text-[color:var(--chart-4)]" />
@@ -739,40 +839,6 @@ export const Settings: React.FC = () => {
               onCheckedChange={(checked) => setContrastMode(checked ? 'high' : 'normal')}
               className="settings-switch"
             />
-          </div>
-
-          <div className="h-px bg-border" />
-
-          <div className="bg-secondary/60 border border-border rounded-lg p-4">
-            <h4 className="text-foreground font-medium mb-2">
-              {language === 'ar' ? 'معاينة الألوان الحالية' : 'Current Color Preview'}
-            </h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              <div className="space-y-2">
-                <p className="text-muted-foreground text-xs">{t('satisfaction', language)}</p>
-                <div className="flex gap-1">
-                  <div className="w-8 h-8 rounded" style={{ backgroundColor: stateColors.satisfaction.high }} />
-                  <div className="w-8 h-8 rounded" style={{ backgroundColor: stateColors.satisfaction.medium }} />
-                  <div className="w-8 h-8 rounded" style={{ backgroundColor: stateColors.satisfaction.low }} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <p className="text-muted-foreground text-xs">{t('attention', language)}</p>
-                <div className="flex gap-1">
-                  <div className="w-8 h-8 rounded" style={{ backgroundColor: stateColors.attention.high }} />
-                  <div className="w-8 h-8 rounded" style={{ backgroundColor: stateColors.attention.medium }} />
-                  <div className="w-8 h-8 rounded" style={{ backgroundColor: stateColors.attention.low }} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <p className="text-muted-foreground text-xs">{t('stress', language)}</p>
-                <div className="flex gap-1">
-                  <div className="w-8 h-8 rounded" style={{ backgroundColor: stateColors.stress.low }} />
-                  <div className="w-8 h-8 rounded" style={{ backgroundColor: stateColors.stress.medium }} />
-                  <div className="w-8 h-8 rounded" style={{ backgroundColor: stateColors.stress.high }} />
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </Card>

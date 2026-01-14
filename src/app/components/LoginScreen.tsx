@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { BadgeCheck, Eye, EyeOff, Fingerprint, KeyRound, LogIn, Moon, Sun } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { baseColors, loginColors } from '../theme';
+import { isValidEmail, isStrongPassword } from '../utils/validation';
 
 const copy = {
   en: {
@@ -26,6 +27,7 @@ const copy = {
     brandA: 'AURA',
     brandAAlt: 'A',
     emailRequired: 'Please enter a valid email address.',
+    passwordRequired: 'Please enter a valid password (min 8 characters).',
   },
   ar: {
     support: 'الدعم',
@@ -49,6 +51,7 @@ const copy = {
     brandA: 'AURA',
     brandAAlt: 'A',
     emailRequired: 'يرجى إدخال بريد إلكتروني صحيح.',
+    passwordRequired: 'يرجى إدخال كلمة مرور صحيحة (8 أحرف على الأقل).',
   },
 };
 
@@ -58,6 +61,7 @@ export const LoginScreen: React.FC<{ onLogin: (email: string) => void }> = ({ on
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   const isRTL = language === 'ar';
   const text = useMemo(() => copy[isRTL ? 'ar' : 'en'], [isRTL]);
@@ -92,15 +96,18 @@ export const LoginScreen: React.FC<{ onLogin: (email: string) => void }> = ({ on
     document.documentElement.setAttribute('dir', isRTL ? 'rtl' : 'ltr');
   }, [isRTL]);
 
-  const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-
   const attemptLogin = () => {
     const email = enterpriseId.trim().toLowerCase();
     if (!isValidEmail(email)) {
       setEmailError(text.emailRequired);
       return;
     }
+    if (!isStrongPassword(password)) {
+      setPasswordError(text.passwordRequired);
+      return;
+    }
     setEmailError('');
+    setPasswordError('');
     onLogin(email);
   };
 
@@ -205,9 +212,17 @@ export const LoginScreen: React.FC<{ onLogin: (email: string) => void }> = ({ on
                       setEmailError('');
                     }
                   }}
+                  onBlur={() => {
+                    if (enterpriseId.trim() && !isValidEmail(enterpriseId)) {
+                      setEmailError(text.emailRequired);
+                    }
+                  }}
                   className="w-full h-14 rounded-lg px-4 text-[color:var(--login-text)] placeholder:text-[color:var(--login-placeholder)] focus:outline-none focus:ring-1 focus:ring-[color:var(--login-accent)] focus:border-[color:var(--login-accent)] transition-all bg-[color:var(--login-input-bg)] border border-[color:var(--login-border)]"
                   placeholder={text.emailPH}
                   type="text"
+                  inputMode="email"
+                  autoComplete="email"
+                  aria-invalid={Boolean(emailError)}
                 />
                 <div
                   className={`absolute top-1/2 -translate-y-1/2 text-[color:var(--login-icon)] group-focus-within:text-[color:var(--login-accent)] transition-colors ${
@@ -238,10 +253,23 @@ export const LoginScreen: React.FC<{ onLogin: (email: string) => void }> = ({ on
               <div className="relative group">
                 <input
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setPassword(value);
+                    if (passwordError && isStrongPassword(value)) {
+                      setPasswordError('');
+                    }
+                  }}
+                  onBlur={() => {
+                    if (password && !isStrongPassword(password)) {
+                      setPasswordError(text.passwordRequired);
+                    }
+                  }}
                   className="w-full h-14 rounded-lg px-4 text-[color:var(--login-text)] placeholder:text-[color:var(--login-placeholder)] focus:outline-none focus:ring-1 focus:ring-[color:var(--login-accent)] focus:border-[color:var(--login-accent)] transition-all bg-[color:var(--login-input-bg)] border border-[color:var(--login-border)]"
                   placeholder="••••••••••••"
                   type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  aria-invalid={Boolean(passwordError)}
                 />
                 <div
                   className={`absolute top-1/2 -translate-y-1/2 flex items-center gap-2 ${
@@ -261,6 +289,9 @@ export const LoginScreen: React.FC<{ onLogin: (email: string) => void }> = ({ on
                   </span>
                 </div>
               </div>
+              {passwordError && (
+                <p className="text-xs text-red-600 dark:text-red-400 px-1">{passwordError}</p>
+              )}
             </div>
 
             <div className="flex items-start gap-6 p-3 bg-[color:var(--login-accent-soft)] border border-[color:var(--login-accent-border)] rounded-lg">

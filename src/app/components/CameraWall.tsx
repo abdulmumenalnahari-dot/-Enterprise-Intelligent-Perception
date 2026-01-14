@@ -3,11 +3,12 @@ import { useApp } from '../contexts/AppContext';
 import { t } from '../i18n/translations';
 import { Camera as CameraType, DetectedPerson } from '../types';
 import { CameraFeed } from './CameraFeed';
-import { Grid3x3, Grid2x2, List, Search, Maximize2, Minimize2, Plus } from 'lucide-react';
+import { Grid3x3, Grid2x2, List, Search, Maximize2, Minimize2, Plus, Trash2 } from 'lucide-react';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Slider } from './ui/slider';
+import { isNonEmpty } from '../utils/validation';
 
 export const CameraWall: React.FC = () => {
   const { language, selectedProfile, cameraCount } = useApp();
@@ -22,6 +23,7 @@ export const CameraWall: React.FC = () => {
   const [newCameraLocation, setNewCameraLocation] = useState('');
   const [newCameraContext, setNewCameraContext] = useState<CameraType['context']>('university');
   const [newCameraSensitivity, setNewCameraSensitivity] = useState([50]);
+  const [cameraFormError, setCameraFormError] = useState('');
 
   const contextKeyMap: Record<string, string> = {
     university: 'university',
@@ -125,7 +127,7 @@ export const CameraWall: React.FC = () => {
   const activeCamera = limitedCameras.find((cam) => cam.id === activeCameraId) || null;
 
   const computeAnalytics = (camera: CameraType | null) => {
-    if (!camera) {
+    if (!camera || camera.status !== 'online') {
       return {
         people: 0,
         satisfaction: 0,
@@ -154,16 +156,21 @@ export const CameraWall: React.FC = () => {
   useEffect(() => {
     const clamp = (value: number) => Math.max(0, Math.min(100, value));
     const timer = setInterval(() => {
-      setLiveAnalytics((prev) => ({
-        people: Math.max(0, prev.people + Math.floor(Math.random() * 3) - 1),
-        satisfaction: clamp(prev.satisfaction + Math.floor(Math.random() * 3) - 1),
-        attention: clamp(prev.attention + Math.floor(Math.random() * 3) - 1),
-        stress: clamp(prev.stress + Math.floor(Math.random() * 3) - 1),
-        risk: Math.max(0, prev.risk + (Math.random() > 0.85 ? 1 : 0) - (Math.random() > 0.85 ? 1 : 0))
-      }));
+      setLiveAnalytics((prev) => {
+        if (!activeCamera || activeCamera.status !== 'online') {
+          return { people: 0, satisfaction: 0, attention: 0, stress: 0, risk: 0 };
+        }
+        return {
+          people: Math.max(0, prev.people + Math.floor(Math.random() * 3) - 1),
+          satisfaction: clamp(prev.satisfaction + Math.floor(Math.random() * 3) - 1),
+          attention: clamp(prev.attention + Math.floor(Math.random() * 3) - 1),
+          stress: clamp(prev.stress + Math.floor(Math.random() * 3) - 1),
+          risk: Math.max(0, prev.risk + (Math.random() > 0.85 ? 1 : 0) - (Math.random() > 0.85 ? 1 : 0))
+        };
+      });
     }, 900);
     return () => clearInterval(timer);
-  }, []);
+  }, [activeCamera]);
 
   const analytics = liveAnalytics;
 
@@ -173,9 +180,19 @@ export const CameraWall: React.FC = () => {
     'list': 'grid-cols-1'
   }[layout];
 
+  const activeIsOnline = activeCamera?.status === 'online';
+  const activePeopleCount = activeIsOnline ? activeCamera?.detectedPersons.length ?? 0 : 0;
+  const activeRecordingCount = activeIsOnline && activeCamera?.recording ? 1 : 0;
+  const activeOnlineCount = activeIsOnline ? 1 : 0;
+
   const handleAddCamera = () => {
-    const name = newCameraName.trim() || `Camera ${cameras.length + 1}`;
-    const location = newCameraLocation.trim() || (language === 'ar' ? 'موقع' : 'Location');
+    if (!isNonEmpty(newCameraName) || !isNonEmpty(newCameraLocation)) {
+      setCameraFormError(language === 'ar' ? 'يرجى إدخال الاسم والموقع' : 'Please enter name and location');
+      return;
+    }
+    setCameraFormError('');
+    const name = newCameraName.trim();
+    const location = newCameraLocation.trim();
     const context = selectedContextKey ? (selectedContextKey as CameraType['context']) : newCameraContext;
     const camera: CameraType = {
       id: `CAM-${context}-${Date.now()}`,
@@ -195,6 +212,13 @@ export const CameraWall: React.FC = () => {
     setNewCameraName('');
     setNewCameraLocation('');
     setNewCameraSensitivity([50]);
+  };
+
+  const handleDeleteCamera = (cameraId: string) => {
+    setCameras((prev) => prev.filter((camera) => camera.id !== cameraId));
+    if (activeCameraId === cameraId) {
+      setActiveCameraId(null);
+    }
   };
 
   return (
@@ -310,19 +334,19 @@ export const CameraWall: React.FC = () => {
         <div className="bg-card/80 border border-border rounded-lg p-4">
           <p className="text-muted-foreground text-sm">{t('online', language)}</p>
           <p className="text-2xl font-bold text-[color:var(--chart-4)]">
-            {limitedCameras.filter(c => c.status === 'online').length}
+            {activeOnlineCount}
           </p>
         </div>
         <div className="bg-card/80 border border-border rounded-lg p-4">
           <p className="text-muted-foreground text-sm">{t('peopleDetected', language)}</p>
           <p className="text-2xl font-bold text-accent">
-            {limitedCameras.reduce((sum, c) => sum + c.detectedPersons.length, 0)}
+            {activePeopleCount}
           </p>
         </div>
         <div className="bg-card/80 border border-border rounded-lg p-4">
           <p className="text-muted-foreground text-sm">{t('recording', language)}</p>
           <p className="text-2xl font-bold text-destructive">
-            {limitedCameras.filter(c => c.recording).length}
+            {activeRecordingCount}
           </p>
         </div>
       </div>
@@ -330,14 +354,27 @@ export const CameraWall: React.FC = () => {
       {/* Camera Grid */}
       <div className={`grid ${gridClass} gap-6`}>
         {limitedCameras.map(camera => (
-          <button
-            key={camera.id}
-            type="button"
-            onClick={() => setActiveCameraId(camera.id)}
-            className="text-left"
-          >
-            <CameraFeed camera={camera} />
-          </button>
+          <div key={camera.id} className="relative">
+            <button
+              type="button"
+              onClick={() => setActiveCameraId(camera.id)}
+              className="text-left w-full"
+            >
+              <CameraFeed camera={camera} />
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleDeleteCamera(camera.id);
+              }}
+              className="absolute top-3 left-3 z-10 flex items-center justify-center rounded-lg border border-border bg-card/80 p-2 text-destructive hover:bg-destructive/10 transition-colors"
+              aria-label={language === 'ar' ? 'حذف الكاميرا' : 'Delete camera'}
+              title={language === 'ar' ? 'حذف الكاميرا' : 'Delete camera'}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         ))}
       </div>
 
@@ -426,8 +463,12 @@ export const CameraWall: React.FC = () => {
               </label>
               <Input
                 value={newCameraName}
-                onChange={(e) => setNewCameraName(e.target.value)}
+                onChange={(e) => {
+                  setNewCameraName(e.target.value);
+                  if (cameraFormError) setCameraFormError('');
+                }}
                 placeholder={language === 'ar' ? 'مثال: كاميرا المدخل' : 'e.g. Entry Camera'}
+                aria-invalid={Boolean(cameraFormError)}
               />
             </div>
             <div className="space-y-2">
@@ -436,8 +477,12 @@ export const CameraWall: React.FC = () => {
               </label>
               <Input
                 value={newCameraLocation}
-                onChange={(e) => setNewCameraLocation(e.target.value)}
+                onChange={(e) => {
+                  setNewCameraLocation(e.target.value);
+                  if (cameraFormError) setCameraFormError('');
+                }}
                 placeholder={language === 'ar' ? 'مثال: الطابق الأول' : 'e.g. Floor 1'}
+                aria-invalid={Boolean(cameraFormError)}
               />
             </div>
             {!selectedContextKey && (
@@ -471,6 +516,9 @@ export const CameraWall: React.FC = () => {
                 step={1}
               />
             </div>
+            {cameraFormError && (
+              <p className="text-xs text-red-600 dark:text-red-400">{cameraFormError}</p>
+            )}
           </div>
 
           <DialogFooter>

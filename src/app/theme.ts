@@ -205,7 +205,7 @@ export const setupWizardColors = {
   selectedCardDarkShadow: '0 0 15px rgba(45, 212, 191, 0.5)',
   selectedCardDarkBorder: '#2dd4bf',
   lightText300: 'rgba(15,23,42,0.72)',
-  lightText400: 'rgba(15,23,42,0.68)',
+  lightText400: 'rgba(15,23,42,0.5)',
   lightBorder600: 'rgba(15,23,42,0.15)',
   lightBorder700: 'rgba(15,23,42,0.18)',
   logoShadow: 'drop-shadow(0 8px 18px rgba(15,23,42,0.18))',
@@ -280,10 +280,10 @@ export const layoutColors = {
 
 // Dashboard
 export const dashboardColors = {
-  panelLight: 'rgba(255, 255, 255, 0.85)',
-  panelDark: 'rgba(10, 20, 21, 0.9)',
-  panelSoftLight: 'rgba(255, 255, 255, 0.7)',
-  panelSoftDark: 'rgba(10, 20, 21, 0.7)'
+  panelLight: 'rgba(30, 41, 59, 0.6)',
+  panelDark: 'rgba(30, 41, 59, 0.6)',
+  panelSoftLight: 'rgba(30, 41, 59, 0.6)',
+  panelSoftDark: 'rgba(30, 41, 59, 0.6)'
 } as const;
 
 // Analytics

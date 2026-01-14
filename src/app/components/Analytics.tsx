@@ -7,14 +7,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Calendar, TrendingUp, Users, Smile, Eye, Zap, Download } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { analyticsColors } from '../theme';
+import { clampNumber, parseNumber } from '../utils/validation';
+import { toBlob, toPng } from 'html-to-image';
+import jsPDF from 'jspdf';
 
 export const Analytics: React.FC = () => {
   const { language, stateColors } = useApp();
   const [timeRange, setTimeRange] = useState('24h');
   const [customAmount, setCustomAmount] = useState(3);
   const [customUnit, setCustomUnit] = useState<'hour' | 'day' | 'month'>('day');
+  const [exportMenu, setExportMenu] = useState<null | 'metrics' | 'trends' | 'distributions'>(null);
   const metricsRef = useRef<HTMLDivElement | null>(null);
   const trendsRef = useRef<HTMLDivElement | null>(null);
   const distributionsRef = useRef<HTMLDivElement | null>(null);
@@ -52,6 +55,9 @@ export const Analytics: React.FC = () => {
     return hours(24);
   }, [customAmount, customUnit, language, timeRange]);
 
+  const customAmountError =
+    timeRange === 'custom' && (customAmount < 1 || customAmount > 365);
+
   const metrics = useMemo(() => {
     const totalPeople = timeSeriesData.reduce((sum, point) => sum + point.people, 0);
     const avg = (key: 'satisfaction' | 'attention' | 'stress') =>
@@ -64,91 +70,159 @@ export const Analytics: React.FC = () => {
     };
   }, [timeSeriesData]);
 
-  const exportNodeAsPng = (node: HTMLElement | null, filename: string) => {
-    if (!node) return;
-    const width = node.offsetWidth;
-    const height = node.offsetHeight;
-    const cloned = node.cloneNode(true) as HTMLElement;
-    cloned.style.width = `${width}px`;
-    cloned.style.height = `${height}px`;
-    const isDark = document.documentElement.classList.contains('dark');
-    cloned.style.background = isDark ? analyticsColors.exportDark : analyticsColors.exportLight;
-    const serializer = new XMLSerializer();
-    const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-        <foreignObject width="100%" height="100%">
-          <div xmlns="http://www.w3.org/1999/xhtml">${serializer.serializeToString(cloned)}</div>
-        </foreignObject>
-      </svg>
-    `;
-    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const scale = window.devicePixelRatio || 1;
-      canvas.width = width * scale;
-      canvas.height = height * scale;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      ctx.scale(scale, scale);
-      ctx.drawImage(img, 0, 0);
-      URL.revokeObjectURL(url);
-      const link = document.createElement('a');
-      link.download = filename;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    };
-    img.src = url;
+  const getExportNode = (key: 'metrics' | 'trends' | 'distributions') => {
+    if (key === 'metrics') return metricsRef.current ?? document.getElementById('analytics-metrics');
+    if (key === 'trends') return trendsRef.current ?? document.getElementById('analytics-trends');
+    return distributionsRef.current ?? document.getElementById('analytics-distributions');
   };
 
-  const exportNodeAsPdf = (node: HTMLElement | null, filename: string) => {
+  const getExportBackground = () => {
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--background').trim();
+    return bg || (document.documentElement.classList.contains('dark') ? '#0a1415' : '#ffffff');
+  };
+
+  const exportNodeAsPng = async (node: HTMLElement | null, filename: string) => {
     if (!node) return;
-    exportNodeAsPng(node, filename.replace('.pdf', '.png'));
-    setTimeout(() => window.print(), 300);
+    try {
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(true)));
+      const blob = await toBlob(node, {
+        backgroundColor: getExportBackground(),
+        pixelRatio: 2,
+        filter: (domNode) => !(domNode as HTMLElement)?.dataset?.exportIgnore
+      });
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = url;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export PNG failed', error);
+    }
+  };
+
+  const exportNodeAsPdf = async (node: HTMLElement | null, filename: string) => {
+    if (!node) return;
+    try {
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(true)));
+      const dataUrl = await toPng(node, {
+        backgroundColor: getExportBackground(),
+        pixelRatio: 2,
+        filter: (domNode) => !(domNode as HTMLElement)?.dataset?.exportIgnore
+      });
+      const img = new Image();
+      img.onload = () => {
+        const pdf = new jsPDF({
+          orientation: img.width > img.height ? 'l' : 'p',
+          unit: 'px',
+          format: [img.width, img.height]
+        });
+        pdf.addImage(dataUrl, 'PNG', 0, 0, img.width, img.height);
+        pdf.save(filename);
+      };
+      img.src = dataUrl;
+    } catch (error) {
+      console.error('Export PDF failed', error);
+    }
   };
 
   const [satisfactionDistribution, attentionDistribution, stressDistribution] = useMemo(() => {
-    const clamp = (value: number) => Math.max(0, Math.min(100, value));
-    const avg = (key: 'satisfaction' | 'attention' | 'stress') =>
-      timeSeriesData.reduce((sum, point) => sum + point[key], 0) / timeSeriesData.length;
-    const satisfactionAvg = avg('satisfaction');
-    const attentionAvg = avg('attention');
-    const stressAvg = avg('stress');
+    const toPercent = (count: number, total: number) =>
+      total === 0 ? 0 : Math.round((count / total) * 100);
 
-    const toDistribution = (mean: number, mode: 'high' | 'low') => {
-      const bias = mode === 'high' ? 0.6 : 0.4;
-      const high = clamp(mean * (0.6 + bias * 0.2));
-      const medium = clamp(100 - high);
-      const low = clamp(100 - high - medium);
-      return {
-        high: Math.round(clamp(high * 0.6)),
-        medium: Math.round(clamp(medium * 0.7)),
-        low: Math.max(0, 100 - Math.round(clamp(high * 0.6)) - Math.round(clamp(medium * 0.7)))
-      };
+    const classify = (value: number, highCut: number, lowCut: number) => {
+      if (value >= highCut) return 'high';
+      if (value <= lowCut) return 'low';
+      return 'medium';
     };
 
-    const sat = toDistribution(satisfactionAvg, 'high');
-    const att = toDistribution(attentionAvg, 'high');
-    const str = toDistribution(stressAvg, 'low');
+    const buildDistribution = (
+      key: 'satisfaction' | 'attention' | 'stress',
+      colors: { high: string; medium: string; low: string },
+      labels: { high: string; medium: string; low: string }
+    ) => {
+      const total = timeSeriesData.length;
+      const avg =
+        total === 0 ? 0 : timeSeriesData.reduce((sum, point) => sum + point[key], 0) / total;
+      const highCut = Math.min(95, Math.max(5, avg + 5));
+      const lowCut = Math.max(5, Math.min(95, avg - 5));
+      let high = 0;
+      let medium = 0;
+      let low = 0;
+      timeSeriesData.forEach((point) => {
+        const category = classify(point[key], highCut, lowCut);
+        if (category === 'high') high += 1;
+        else if (category === 'low') low += 1;
+        else medium += 1;
+      });
+      let highValue = toPercent(high, total);
+      let mediumValue = toPercent(medium, total);
+      let lowValue = toPercent(low, total);
+      if (total > 0) {
+        const values = [
+          { key: 'high', value: highValue },
+          { key: 'medium', value: mediumValue },
+          { key: 'low', value: lowValue }
+        ];
+        const zeroKeys = values.filter((item) => item.value === 0).map((item) => item.key);
+        if (zeroKeys.length > 0) {
+          zeroKeys.forEach((key) => {
+            if (key === 'high') highValue = 1;
+            if (key === 'medium') mediumValue = 1;
+            if (key === 'low') lowValue = 1;
+          });
+          const sum = highValue + mediumValue + lowValue;
+          if (sum !== 100) {
+            const diff = sum - 100;
+            const maxKey =
+              highValue >= mediumValue && highValue >= lowValue
+                ? 'high'
+                : mediumValue >= lowValue
+                  ? 'medium'
+                  : 'low';
+            if (maxKey === 'high') highValue = Math.max(1, highValue - diff);
+            if (maxKey === 'medium') mediumValue = Math.max(1, mediumValue - diff);
+            if (maxKey === 'low') lowValue = Math.max(1, lowValue - diff);
+          }
+        }
+      }
+      return [
+        { name: labels.high, value: highValue, color: colors.high },
+        { name: labels.medium, value: mediumValue, color: colors.medium },
+        { name: labels.low, value: lowValue, color: colors.low }
+      ];
+    };
 
-    const satisfaction = [
-      { name: t('satisfactionHigh', language), value: sat.high, color: stateColors.satisfaction.high },
-      { name: t('satisfactionMedium', language), value: sat.medium, color: stateColors.satisfaction.medium },
-      { name: t('satisfactionLow', language), value: sat.low, color: stateColors.satisfaction.low }
-    ];
+    const satisfaction = buildDistribution(
+      'satisfaction',
+      stateColors.satisfaction,
+      {
+        high: t('satisfactionHigh', language),
+        medium: t('satisfactionMedium', language),
+        low: t('satisfactionLow', language)
+      }
+    );
 
-    const attention = [
-      { name: t('attentionHigh', language), value: att.high, color: stateColors.attention.high },
-      { name: t('attentionMedium', language), value: att.medium, color: stateColors.attention.medium },
-      { name: t('attentionLow', language), value: att.low, color: stateColors.attention.low }
-    ];
+    const attention = buildDistribution(
+      'attention',
+      stateColors.attention,
+      {
+        high: t('attentionHigh', language),
+        medium: t('attentionMedium', language),
+        low: t('attentionLow', language)
+      }
+    );
 
-    const stress = [
-      { name: t('stressLow', language), value: str.low, color: stateColors.stress.low },
-      { name: t('stressMedium', language), value: str.medium, color: stateColors.stress.medium },
-      { name: t('stressHigh', language), value: str.high, color: stateColors.stress.high }
-    ];
+    const stress = buildDistribution(
+      'stress',
+      { high: stateColors.stress.high, medium: stateColors.stress.medium, low: stateColors.stress.low },
+      {
+        high: t('stressHigh', language),
+        medium: t('stressMedium', language),
+        low: t('stressLow', language)
+      }
+    );
 
     return [satisfaction, attention, stress];
   }, [language, stateColors, timeSeriesData]);
@@ -159,7 +233,7 @@ export const Analytics: React.FC = () => {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Select value={timeRange} onValueChange={setTimeRange}>
-          <SelectTrigger className="w-[180px] bg-card/80 border-border text-foreground">
+          <SelectTrigger className="w-[180px] bg-card border-border text-foreground dark:bg-[#243638]">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4" />
               <SelectValue />
@@ -183,11 +257,13 @@ export const Analytics: React.FC = () => {
                 min={1}
                 max={365}
                 value={customAmount}
-                onChange={(e) => setCustomAmount(Number(e.target.value || 1))}
+                onChange={(e) => setCustomAmount(parseNumber(e.target.value, 1))}
+                onBlur={() => setCustomAmount(clampNumber(customAmount || 1, 1, 365))}
                 className="w-24 bg-card/80 border-border text-foreground"
+                aria-invalid={customAmountError}
               />
               <Select value={customUnit} onValueChange={(value) => setCustomUnit(value as 'hour' | 'day' | 'month')}>
-                <SelectTrigger className="w-[140px] bg-card/80 border-border text-foreground">
+                <SelectTrigger className="w-[140px] bg-card border-border text-foreground dark:bg-[#243638]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -200,22 +276,48 @@ export const Analytics: React.FC = () => {
           )}
         </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button className="bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:opacity-90">
-              <Download className="w-4 h-4 mr-2" />
-              {t('export', language)}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem onSelect={() => exportNodeAsPng(metricsRef.current, 'analytics-kpis.png')}>PNG</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => exportNodeAsPdf(metricsRef.current, 'analytics-kpis.pdf')}>PDF</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="relative">
+          <Button
+            className="bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:opacity-90"
+            onClick={() => setExportMenu(exportMenu === 'metrics' ? null : 'metrics')}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            {t('export', language)}
+          </Button>
+          {exportMenu === 'metrics' && (
+            <div className="absolute right-0 mt-2 flex gap-2 rounded-lg border border-border bg-card/90 p-2 shadow-lg z-10">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  exportNodeAsPng(getExportNode('metrics'), 'analytics-kpis.png');
+                  setExportMenu(null);
+                }}
+              >
+                PNG
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  exportNodeAsPdf(getExportNode('metrics'), 'analytics-kpis.pdf');
+                  setExportMenu(null);
+                }}
+              >
+                PDF
+              </Button>
+            </div>
+          )}
+          {customAmountError && (
+            <p className="text-xs text-red-600 dark:text-red-400">
+              {language === 'ar' ? 'القيمة يجب أن تكون بين 1 و 365' : 'Value must be between 1 and 365'}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Key Metrics Cards */}
-      <div ref={metricsRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div id="analytics-metrics" ref={metricsRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="bg-card/80 border-border p-6">
           <div className="flex items-start justify-between mb-4">
             <div className="w-12 h-12 bg-primary/15 rounded-lg flex items-center justify-center">
@@ -278,23 +380,44 @@ export const Analytics: React.FC = () => {
       </div>
 
       {/* Time Series Chart */}
-      <Card ref={trendsRef} className="bg-card/80 backdrop-blur-xl border-border p-6">
-        <div className="flex items-center justify-between mb-6">
+      <Card id="analytics-trends" ref={trendsRef} className="bg-card/80 backdrop-blur-xl border-border p-6">
+        <div className="flex items-center justify-between mb-6" data-export-ignore="true">
           <h2 className="text-xl font-bold text-foreground">
             {language === 'ar' ? 'الاتجاهات على مدار الوقت' : 'Trends Over Time'}
           </h2>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button className="bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:opacity-90">
-                <Download className="w-4 h-4 mr-2" />
-                {t('export', language)}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onSelect={() => exportNodeAsPng(trendsRef.current, 'analytics-trends.png')}>PNG</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => exportNodeAsPdf(trendsRef.current, 'analytics-trends.pdf')}>PDF</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="relative">
+            <Button
+              className="bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:opacity-90"
+              onClick={() => setExportMenu(exportMenu === 'trends' ? null : 'trends')}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {t('export', language)}
+            </Button>
+            {exportMenu === 'trends' && (
+              <div className="absolute right-0 mt-2 flex gap-2 rounded-lg border border-border bg-card/90 p-2 shadow-lg z-10">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    exportNodeAsPng(getExportNode('trends'), 'analytics-trends.png');
+                    setExportMenu(null);
+                  }}
+                >
+                  PNG
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    exportNodeAsPdf(getExportNode('trends'), 'analytics-trends.pdf');
+                    setExportMenu(null);
+                  }}
+                >
+                  PDF
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
         <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={timeSeriesData}>
@@ -314,7 +437,7 @@ export const Analytics: React.FC = () => {
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="label" stroke="var(--muted-foreground)" />
-            <YAxis stroke="var(--muted-foreground)" />
+            <YAxis stroke="var(--muted-foreground)" tickMargin={16} dx={-8} />
             <Tooltip 
               contentStyle={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--foreground)' }}
               labelStyle={{ color: 'var(--foreground)' }}
@@ -333,21 +456,42 @@ export const Analytics: React.FC = () => {
         <h3 className="text-lg font-bold text-foreground">
           {language === 'ar' ? 'توزيعات المؤشرات' : 'Metric Distributions'}
         </h3>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button className="bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:opacity-90">
-              <Download className="w-4 h-4 mr-2" />
-              {t('export', language)}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem onSelect={() => exportNodeAsPng(distributionsRef.current, 'analytics-distributions.png')}>PNG</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => exportNodeAsPdf(distributionsRef.current, 'analytics-distributions.pdf')}>PDF</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="relative">
+          <Button
+            className="bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:opacity-90"
+            onClick={() => setExportMenu(exportMenu === 'distributions' ? null : 'distributions')}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            {t('export', language)}
+          </Button>
+          {exportMenu === 'distributions' && (
+            <div className="absolute right-0 mt-2 flex gap-2 rounded-lg border border-border bg-card/90 p-2 shadow-lg z-10">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  exportNodeAsPng(getExportNode('distributions'), 'analytics-distributions.png');
+                  setExportMenu(null);
+                }}
+              >
+                PNG
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  exportNodeAsPdf(getExportNode('distributions'), 'analytics-distributions.pdf');
+                  setExportMenu(null);
+                }}
+              >
+                PDF
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div ref={distributionsRef} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div id="analytics-distributions" ref={distributionsRef} className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="bg-card/80 backdrop-blur-xl border-border p-6">
           <h3 className="text-lg font-bold text-foreground mb-4 text-center">
             {t('satisfaction', language)} {language === 'ar' ? 'التوزيع' : 'Distribution'}

@@ -4,7 +4,7 @@
   --font-size: 16px;
   --background: #f3f5f6;
   --foreground: #0b1415;
-  --card: #ffffff;
+  --card: rgba(255, 255, 255, 0.85);
   --card-foreground: #0b1415;
   --popover: #ffffff;
   --popover-foreground: #0b1415;
@@ -20,7 +20,7 @@
   --destructive-foreground: #ffffff;
   --border: #d7dee0;
   --input: transparent;
-  --input-background: #e6ecee;
+  --input-background: #ffffff;
   --switch-background: #cfd8da;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
@@ -45,7 +45,7 @@
 .dark {
   --background: #102022;
   --foreground: #f6f8f8;
-  --card: #0a1415;
+  --card: rgba(30, 41, 59, 0.6);
   --card-foreground: #f6f8f8;
   --popover: #0a1415;
   --popover-foreground: #f6f8f8;
@@ -60,7 +60,7 @@
   --destructive: #dc2626;
   --destructive-foreground: #f8fafc;
   --border: #1b2a2c;
-  --input: #132526;
+  --input: #1f2a2b;
   --ring: #d4af37;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
@@ -78,6 +78,10 @@
   --sidebar-border: #1b2a2c;
   --sidebar-ring: #d4af37;
 
+}
+
+.dark header.bg-background\/80 {
+  background-color: rgba(13, 19, 33, 0.88) !important;
 }
 
 .contrast-high {
@@ -258,3 +262,16 @@ html:not(.dark) .text-white { color: #0a1415 !important; }
 .contrast-high .text-white\/70 { color: var(--foreground) !important; }
 .contrast-high .text-white\/80 { color: var(--foreground) !important; }
 .contrast-high .text-white\/30 { color: var(--foreground) !important; }
+
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  html,
+  body {
+    background: var(--background) !important;
+    color: var(--foreground) !important;
+  }
+}

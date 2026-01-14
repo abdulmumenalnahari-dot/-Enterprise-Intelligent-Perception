@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -8,6 +8,9 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { toBlob, toPng } from 'html-to-image';
+import jsPDF from 'jspdf';
+import { clampNumber, parseNumber } from '../utils/validation';
 
 export const Reports: React.FC = () => {
   const { language } = useApp();
@@ -25,6 +28,8 @@ export const Reports: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState<'all' | 'satisfaction' | 'stress' | 'alerts'>('all');
   const [periodFilter, setPeriodFilter] = useState<'all' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom'>('all');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest'>('newest');
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [createError, setCreateError] = useState('');
 
   const unitLabel = (unit: typeof fromUnit, amount: number) => {
     if (isRTL) {
@@ -56,6 +61,13 @@ export const Reports: React.FC = () => {
   };
 
   const handleCreate = () => {
+    const fromValid = fromAmount >= 1 && fromAmount <= 365;
+    const toValid = toAmount >= 1 && toAmount <= 365;
+    if (!fromValid || !toValid) {
+      setCreateError(isRTL ? 'المدة يجب أن تكون بين 1 و 365.' : 'Range must be between 1 and 365.');
+      return;
+    }
+    setCreateError('');
     const now = new Date();
     const title = `${typeLabel(reportType)} (${rangeLabel()})`;
     const newReport = {
@@ -94,6 +106,82 @@ export const Reports: React.FC = () => {
   const visibleReports = useMemo(() => applyFilters(reports), [reports, query, typeFilter, periodFilter, sortBy]);
   const visibleFixedReports = useMemo(() => applyFilters(fixedReports), [fixedReports, query, typeFilter, periodFilter, sortBy]);
 
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const getExportBackground = () => {
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--background').trim();
+    return bg || (document.documentElement.classList.contains('dark') ? '#0a1415' : '#ffffff');
+  };
+
+  const exportNodeAsImage = async (node: HTMLElement | null, filename: string, format: 'png' | 'jpg') => {
+    if (!node) return;
+    try {
+      const blob = await toBlob(node, {
+        backgroundColor: getExportBackground(),
+        pixelRatio: 2
+      });
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = url;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export image failed', error);
+    }
+  };
+
+  const exportNodeAsPdf = async (node: HTMLElement | null, filename: string) => {
+    if (!node) return;
+    try {
+      const dataUrl = await toPng(node, {
+        backgroundColor: getExportBackground(),
+        pixelRatio: 2
+      });
+      const img = new Image();
+      img.onload = () => {
+        const pdf = new jsPDF({
+          orientation: img.width > img.height ? 'l' : 'p',
+          unit: 'px',
+          format: [img.width, img.height]
+        });
+        pdf.addImage(dataUrl, 'PNG', 0, 0, img.width, img.height);
+        pdf.save(filename);
+      };
+      img.src = dataUrl;
+    } catch (error) {
+      console.error('Export PDF failed', error);
+    }
+  };
+
+  const exportReport = (report: ReportItem, format: 'png' | 'jpg' | 'pdf' | 'csv') => {
+    const node = cardRefs.current[report.id];
+    if (format === 'csv') {
+      const rows = [
+        ['title', report.title],
+        ['date', report.date],
+        ['range', report.range ?? ''],
+        ['size', report.size]
+      ];
+      const content = rows.map((row) => row.join(',')).join('\n');
+      downloadBlob(new Blob([content], { type: 'text/csv;charset=utf-8' }), `${report.id}.csv`);
+      return;
+    }
+    if (format === 'pdf') {
+      exportNodeAsPdf(node ?? null, `${report.id}.pdf`);
+      return;
+    }
+    exportNodeAsImage(node ?? null, `${report.id}.${format}`, format);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -122,7 +210,7 @@ export const Reports: React.FC = () => {
           />
         </div>
         <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as typeof typeFilter)}>
-          <SelectTrigger className="w-[190px] bg-card/80 border-border text-foreground">
+          <SelectTrigger className="w-[190px] bg-card border-border text-foreground dark:bg-[#243638]">
             <SelectValue placeholder={isRTL ? 'نوع التقرير' : 'Report type'} />
           </SelectTrigger>
           <SelectContent>
@@ -133,7 +221,7 @@ export const Reports: React.FC = () => {
           </SelectContent>
         </Select>
         <Select value={periodFilter} onValueChange={(value) => setPeriodFilter(value as typeof periodFilter)}>
-          <SelectTrigger className="w-[190px] bg-card/80 border-border text-foreground">
+          <SelectTrigger className="w-[190px] bg-card border-border text-foreground dark:bg-[#243638]">
             <SelectValue placeholder={isRTL ? 'الفترة' : 'Period'} />
           </SelectTrigger>
           <SelectContent>
@@ -146,7 +234,7 @@ export const Reports: React.FC = () => {
           </SelectContent>
         </Select>
         <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
-          <SelectTrigger className="w-[190px] bg-card/80 border-border text-foreground">
+          <SelectTrigger className="w-[190px] bg-card border-border text-foreground dark:bg-[#243638]">
             <SelectValue placeholder={isRTL ? 'الترتيب' : 'Sort by'} />
           </SelectTrigger>
           <SelectContent>
@@ -159,26 +247,28 @@ export const Reports: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {visibleReports.map(report => (
           <Card key={report.id} className="bg-card/80 border-border p-6 flex flex-col">
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-12 h-12 bg-primary/15 rounded-lg flex items-center justify-center">
-                <FileText className="w-6 h-6 text-primary" />
+            <div ref={(el) => { cardRefs.current[report.id] = el; }}>
+              <div className="flex items-start justify-between mb-4">
+                <div className="w-12 h-12 bg-primary/15 rounded-lg flex items-center justify-center">
+                  <FileText className="w-6 h-6 text-primary" />
+                </div>
               </div>
-            </div>
-            <h3 className="text-foreground font-medium mb-2 line-clamp-2 min-h-[3rem]">{report.title}</h3>
-            <div className="space-y-1 mb-4 flex-1">
-              <p className="text-muted-foreground text-sm flex items-center gap-2">
-                <Calendar className="w-4 h-4" />
-                {report.date}
-              </p>
-              {report.createdAt && (
-                <p className="text-muted-foreground text-xs">
-                  {new Date(report.createdAt).toLocaleString(isRTL ? 'ar-SA' : 'en-US')}
+              <h3 className="text-foreground font-medium mb-2 line-clamp-2 min-h-[3rem]">{report.title}</h3>
+              <div className="space-y-1 mb-4 flex-1">
+                <p className="text-muted-foreground text-sm flex items-center gap-2">
+                  <Calendar className="w-4 h-4" />
+                  {report.date}
                 </p>
-              )}
-              {report.range && (
-                <p className="text-muted-foreground text-xs">{report.range}</p>
-              )}
-              <p className="text-muted-foreground text-sm">{report.size}</p>
+                {report.createdAt && (
+                  <p className="text-muted-foreground text-xs">
+                    {new Date(report.createdAt).toLocaleString(isRTL ? 'ar-SA' : 'en-US')}
+                  </p>
+                )}
+                {report.range && (
+                  <p className="text-muted-foreground text-xs">{report.range}</p>
+                )}
+                <p className="text-muted-foreground text-sm">{report.size}</p>
+              </div>
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -188,10 +278,10 @@ export const Reports: React.FC = () => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>PDF</DropdownMenuItem>
-                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>PNG</DropdownMenuItem>
-                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>JPG</DropdownMenuItem>
-                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>CSV</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => exportReport(report, 'pdf')}>PDF</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => exportReport(report, 'png')}>PNG</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => exportReport(report, 'jpg')}>JPG</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => exportReport(report, 'csv')}>CSV</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </Card>
@@ -205,18 +295,20 @@ export const Reports: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {visibleFixedReports.map(report => (
             <Card key={report.id} className="bg-card/80 border-border p-6 flex flex-col">
-              <div className="flex items-start justify-between mb-4">
-                <div className="w-12 h-12 bg-primary/15 rounded-lg flex items-center justify-center">
-                  <FileText className="w-6 h-6 text-primary" />
+              <div ref={(el) => { cardRefs.current[report.id] = el; }}>
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-12 h-12 bg-primary/15 rounded-lg flex items-center justify-center">
+                    <FileText className="w-6 h-6 text-primary" />
+                  </div>
                 </div>
-              </div>
-              <h3 className="text-foreground font-medium mb-2 line-clamp-2 min-h-[3rem]">{report.title}</h3>
-              <div className="space-y-1 mb-4 flex-1">
-                <p className="text-muted-foreground text-sm flex items-center gap-2">
-                  <Calendar className="w-4 h-4" />
-                  {report.date}
-                </p>
-                <p className="text-muted-foreground text-sm">{report.size}</p>
+                <h3 className="text-foreground font-medium mb-2 line-clamp-2 min-h-[3rem]">{report.title}</h3>
+                <div className="space-y-1 mb-4 flex-1">
+                  <p className="text-muted-foreground text-sm flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    {report.date}
+                  </p>
+                  <p className="text-muted-foreground text-sm">{report.size}</p>
+                </div>
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -226,10 +318,10 @@ export const Reports: React.FC = () => {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem onSelect={(e) => e.preventDefault()}>PDF</DropdownMenuItem>
-                  <DropdownMenuItem onSelect={(e) => e.preventDefault()}>PNG</DropdownMenuItem>
-                  <DropdownMenuItem onSelect={(e) => e.preventDefault()}>JPG</DropdownMenuItem>
-                  <DropdownMenuItem onSelect={(e) => e.preventDefault()}>CSV</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => exportReport(report, 'pdf')}>PDF</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => exportReport(report, 'png')}>PNG</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => exportReport(report, 'jpg')}>JPG</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => exportReport(report, 'csv')}>CSV</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </Card>
@@ -250,7 +342,7 @@ export const Reports: React.FC = () => {
             <div className="space-y-2">
               <Label>{isRTL ? 'نوع التقرير' : 'Report Type'}</Label>
               <Select value={reportType} onValueChange={(value) => setReportType(value as typeof reportType)}>
-                <SelectTrigger>
+                <SelectTrigger className="bg-card border-border text-foreground dark:bg-[#243638]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -268,10 +360,16 @@ export const Reports: React.FC = () => {
                   type="number"
                   min={1}
                   value={fromAmount}
-                  onChange={(e) => setFromAmount(Number(e.target.value || 1))}
+                  onChange={(e) => {
+                    setFromAmount(parseNumber(e.target.value, 1));
+                    if (createError) setCreateError('');
+                  }}
+                  onBlur={() => setFromAmount(clampNumber(fromAmount || 1, 1, 365))}
+                  className="bg-card border-border text-foreground dark:bg-[#243638]"
+                  aria-invalid={fromAmount < 1 || fromAmount > 365}
                 />
                 <Select value={fromUnit} onValueChange={(value) => setFromUnit(value as typeof fromUnit)}>
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-card border-border text-foreground dark:bg-[#243638]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -292,10 +390,16 @@ export const Reports: React.FC = () => {
                   type="number"
                   min={1}
                   value={toAmount}
-                  onChange={(e) => setToAmount(Number(e.target.value || 1))}
+                  onChange={(e) => {
+                    setToAmount(parseNumber(e.target.value, 1));
+                    if (createError) setCreateError('');
+                  }}
+                  onBlur={() => setToAmount(clampNumber(toAmount || 1, 1, 365))}
+                  className="bg-card border-border text-foreground dark:bg-[#243638]"
+                  aria-invalid={toAmount < 1 || toAmount > 365}
                 />
                 <Select value={toUnit} onValueChange={(value) => setToUnit(value as typeof toUnit)}>
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-card border-border text-foreground dark:bg-[#243638]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -315,9 +419,13 @@ export const Reports: React.FC = () => {
                 value={reportName}
                 onChange={(e) => setReportName(e.target.value)}
                 placeholder={`${typeLabel(reportType)} (${rangeLabel()})`}
+                className="bg-card border-border text-foreground dark:bg-[#243638]"
               />
               <p className="text-xs text-muted-foreground">{rangeLabel()}</p>
             </div>
+            {createError && (
+              <p className="text-xs text-red-600 dark:text-red-400">{createError}</p>
+            )}
           </div>
 
           <DialogFooter>

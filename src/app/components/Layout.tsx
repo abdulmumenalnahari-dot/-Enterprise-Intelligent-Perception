@@ -2,6 +2,8 @@ import React, { ReactNode, useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { t } from '../i18n/translations';
 import { layoutColors } from '../theme';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
+import { Button } from './ui/button';
 import { 
   LayoutDashboard, 
   Camera, 
@@ -32,6 +34,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
     setCurrentUserEmail
   } = useApp();
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const isRTL = language === 'ar';
   const isDark = theme === 'dark';
   const colors = layoutColors;
@@ -89,11 +92,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
         {/* Bottom Actions */}
         <div className="p-4 border-t border-border space-y-2">
           <button
-            onClick={() => {
-              setIsAuthenticated(false);
-              setCurrentUserEmail(null);
-            }}
-            className="w-full flex items-center gap-6 px-4 py-3 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-secondary/70 transition-all"
+            onClick={() => setShowLogoutConfirm(true)}
+            className="w-full flex items-center gap-6 px-4 py-3 rounded-lg bg-destructive/15 text-destructive hover:bg-destructive/25 transition-all"
           >
             <LogOut className="w-5 h-5" />
             <span className="text-sm font-medium">{t('logout', language)}</span>
@@ -187,6 +187,50 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigat
           </button>
         )}
       </div>
+
+      <Dialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
+        <DialogContent className="logout-confirm-dialog">
+          <style>{`
+            .logout-confirm-dialog > button {
+              background-color: var(--destructive) !important;
+              color: var(--destructive-foreground) !important;
+            }
+            .logout-confirm-dialog > button:hover {
+              background-color: color-mix(in srgb, var(--destructive) 90%, transparent) !important;
+            }
+          `}</style>
+          <DialogHeader>
+            <DialogTitle>{language === 'ar' ? 'تأكيد تسجيل الخروج' : 'Confirm Logout'}</DialogTitle>
+            <DialogDescription>
+              {language === 'ar' ? 'هل أنت متأكد أنك تريد تسجيل الخروج؟' : 'Are you sure you want to log out?'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowLogoutConfirm(false)}
+              className="bg-secondary text-foreground hover:bg-secondary/80"
+            >
+              {language === 'ar' ? 'لا' : 'No'}
+            </Button>
+            <Button
+              onClick={() => {
+                setIsAuthenticated(false);
+                setCurrentUserEmail(null);
+                try {
+                  localStorage.removeItem('aura_session');
+                  localStorage.setItem('aura_session_state', 'logged-out');
+                } catch {
+                  // ignore storage errors
+                }
+              }}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {language === 'ar' ? 'نعم' : 'Yes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

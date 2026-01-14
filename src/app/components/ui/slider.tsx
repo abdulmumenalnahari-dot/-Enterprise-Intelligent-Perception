@@ -47,12 +47,12 @@ function Slider({
       )}
       {...props}
     >
-      <SliderPrimitive.Track
-        data-slot="slider-track"
-        className={cn(
-          "bg-muted relative grow overflow-hidden rounded-full data-[orientation=horizontal]:h-4 data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-1.5",
-        )}
-      >
+        <SliderPrimitive.Track
+          data-slot="slider-track"
+          className={cn(
+            "bg-gray-200/80 dark:bg-muted relative grow overflow-hidden rounded-full data-[orientation=horizontal]:h-4 data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-1.5",
+          )}
+        >
         <SliderPrimitive.Range
           data-slot="slider-range"
           className={cn(

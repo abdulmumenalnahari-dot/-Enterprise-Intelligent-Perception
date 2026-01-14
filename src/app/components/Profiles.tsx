@@ -105,7 +105,7 @@ export const Profiles: React.FC = () => {
         </div>
 
         <Select value={riskFilter} onValueChange={(value) => setRiskFilter(value as typeof riskFilter)}>
-          <SelectTrigger className="w-[190px] bg-card/80 border-border text-foreground">
+          <SelectTrigger className="w-[190px] bg-card border-border text-foreground dark:bg-[#243638]">
             <SelectValue placeholder={language === 'ar' ? 'مستوى الخطر' : 'Risk Level'} />
           </SelectTrigger>
           <SelectContent>
@@ -119,7 +119,7 @@ export const Profiles: React.FC = () => {
         </Select>
 
         <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
-          <SelectTrigger className="w-[190px] bg-card/80 border-border text-foreground">
+          <SelectTrigger className="w-[190px] bg-card border-border text-foreground dark:bg-[#243638]">
             <SelectValue placeholder={language === 'ar' ? 'ترتيب حسب' : 'Sort by'} />
           </SelectTrigger>
           <SelectContent>

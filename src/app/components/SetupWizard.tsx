@@ -56,7 +56,7 @@ export const SetupWizard: React.FC<{ onComplete: (profileId: ProfileId) => void 
   const text = useMemo(() => copy[isRTL ? 'ar' : 'en'], [isRTL]);
   const rootStyle: React.CSSProperties = {
     color: isDark ? baseColors.white : colors.textLight,
-    background: isDark ? colors.backgroundDark : colors.backgroundLight,
+    background: 'var(--background)',
     '--setup-accent': colors.accent,
     '--setup-title': colors.titleGold,
     '--setup-foreground': isDark ? baseColors.white : colors.textLight,
@@ -153,6 +153,19 @@ export const SetupWizard: React.FC<{ onComplete: (profileId: ProfileId) => void 
         .card-base {
           background: var(--setup-card-dark);
         }
+        .card-icon {
+          opacity: 1 !important;
+        }
+        .dark .card-icon {
+          mix-blend-mode: normal !important;
+          filter: grayscale(1) brightness(1.35);
+          background-color: rgba(243, 244, 246, 0.95);
+          border-radius: 0.5rem;
+        }
+        .dark .card-unselected {
+          background: rgba(248, 250, 252, 0.16);
+          border-color: rgba(248, 250, 252, 0.35) !important;
+        }
         html:not(.dark) body { color: ${colors.textLight}; }
         html:not(.dark) .card-base {
           background: var(--setup-card-light);
@@ -164,12 +177,15 @@ export const SetupWizard: React.FC<{ onComplete: (profileId: ProfileId) => void 
         }
         html:not(.dark) .text-gray-300 { color: var(--setup-text-300) !important; }
         html:not(.dark) .text-gray-400 { color: var(--setup-text-400) !important; }
+        .card-selected .text-gray-400 { color: rgba(255,255,255,0.6) !important; }
+        html:not(.dark) .card-selected .text-gray-400 { color: rgba(15,23,42,0.45) !important; }
         html:not(.dark) .border-gray-600 { border-color: var(--setup-border-600) !important; }
         html:not(.dark) .border-gray-700 { border-color: var(--setup-border-700) !important; }
-        html:not(.dark) .card-icon {
+        html:not(.dark) .card-icon,
+        html:not(.dark) .card-selected .card-icon,
+        html:not(.dark) .card-unselected .card-icon {
           mix-blend-mode: normal !important;
-          filter: ${colors.logoShadow};
-          opacity: 1 !important;
+          filter: grayscale(1) brightness(1.35) opacity(0.9);
         }
       `}</style>
 

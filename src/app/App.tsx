@@ -29,10 +29,19 @@ function AppContent() {
     setCameraCount,
     hasSeenOnboarding,
     setHasSeenOnboarding,
-    setCurrentUserEmail
+    setCurrentUserEmail,
+    currentUserEmail
   } = useApp();
   const [appState, setAppState] = useState<AppState>('splash');
-  const [currentPage, setCurrentPage] = useState<Page>('dashboard');
+  const [currentPage, setCurrentPage] = useState<Page>(() => {
+    try {
+      const stored = localStorage.getItem('aura_last_page');
+      if (stored) return stored as Page;
+    } catch {
+      // ignore storage errors
+    }
+    return 'dashboard';
+  });
   const [hasShownSplash, setHasShownSplash] = useState(false);
 
   useEffect(() => {
@@ -55,13 +64,32 @@ function AppContent() {
     }
   }, [hasShownSplash, hasSeenOnboarding, isAuthenticated, isSetupComplete, selectedProfile]);
 
+  useEffect(() => {
+    if (!currentUserEmail) return;
+    try {
+      const stored = localStorage.getItem(`aura_last_page:${currentUserEmail}`);
+      if (stored) {
+        setCurrentPage(stored as Page);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [currentUserEmail]);
+
   const handleSplashComplete = () => {
     setHasShownSplash(true);
   };
 
   const handleLogin = (email: string) => {
-    setCurrentUserEmail(email.trim().toLowerCase());
+    const normalized = email.trim().toLowerCase();
+    setCurrentUserEmail(normalized);
     setIsAuthenticated(true);
+    try {
+      localStorage.setItem('aura_session', JSON.stringify({ email: normalized }));
+      localStorage.setItem('aura_session_state', 'logged-in');
+    } catch {
+      // ignore storage errors
+    }
   };
 
   const handleOnboardingComplete = () => {
@@ -73,7 +101,15 @@ function AppContent() {
   };
 
   const handleNavigate = (page: string) => {
-    setCurrentPage(page as Page);
+    const nextPage = page as Page;
+    setCurrentPage(nextPage);
+    if (!currentUserEmail) return;
+    try {
+      localStorage.setItem(`aura_last_page:${currentUserEmail}`, nextPage);
+      localStorage.setItem('aura_last_page', nextPage);
+    } catch {
+      // ignore storage errors
+    }
   };
 
   const renderPage = () => {
